@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Twitch Bot Controller</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: #0e0e10;
+      color: #e0dff0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .blob {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      border-radius: 50%;
+      filter: blur(160px);
+      opacity: 0.6;
+      z-index: 0;
+      animation: float 20s infinite ease-in-out alternate;
+    }
+    .blob1 {
+      background: #9146FF;
+      top: -200px;
+      left: -200px;
+      animation-delay: 0s;
+    }
+    .blob2 {
+      background: #4b0082;
+      bottom: -200px;
+      right: -200px;
+      animation-delay: 5s;
+    }
+    .blob3 {
+      background: #6a0dad;
+      top: 50%;
+      left: 20%;
+      animation-delay: 10s;
+    }
+
+    @keyframes float {
+      0%   { transform: scale(1) translate(0, 0); }
+      50%  { transform: scale(1.2) translate(50px, -30px); }
+      100% { transform: scale(1) translate(-30px, 40px); }
+    }
+
+    .btn-twitch {
+      background: #9146FF;
+      box-shadow: 0 4px 15px rgb(145 70 255 / 0.4);
+      transition: background-color 0.3s ease;
+      z-index: 10;
+    }
+    .btn-twitch:hover:not(:disabled) {
+      background: #772ce8;
+      box-shadow: 0 6px 20px rgb(119 44 232 / 0.6);
+    }
+    .btn-twitch:disabled {
+      background: #555;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+    .btn-resume {
+      background: #00ff88;
+      box-shadow: 0 4px 15px rgb(0 255 136 / 0.4);
+      transition: background-color 0.3s ease;
+      color: #0e0e10;
+      font-weight: 700;
+    }
+    .btn-resume:hover:not(:disabled) {
+      background: #00dd77;
+      box-shadow: 0 6px 20px rgb(0 221 119 / 0.6);
+    }
+    .input-twitch {
+      background-color: #1f1f23;
+      border: 1.5px solid #3a3a3f;
+      transition: border-color 0.3s ease;
+    }
+    .input-twitch:focus {
+      border-color: #9146FF;
+      outline: none;
+      box-shadow: 0 0 8px #9146FFaa;
+    }
+    .status-running {
+      color: #9146FF;
+      font-weight: 600;
+    }
+    .status-paused {
+      color: #ffaa00;
+      font-weight: 600;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .status-stopped {
+      color: #888899;
+      font-weight: 500;
+      font-style: italic;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-8">
+
+  <div class="blob blob1"></div>
+  <div class="blob blob2"></div>
+  <div class="blob blob3"></div>
+
+  <div class="w-full max-w-lg bg-[#18181b]/90 rounded-xl shadow-lg p-10 relative z-10">
+    <header class="flex items-center mb-8 justify-center space-x-3">
+      <span class="text-4xl">🎮</span>
+      <h1 class="text-4xl font-semibold tracking-wide select-none">Twitch Bot Controller</h1>
+    </header>
+
+    <label for="chatInput" class="block mb-3 text-lg font-semibold">Message to send:</label>
+    <textarea
+      id="chatInput"
+      rows="5"
+      placeholder="Enter the message your bot will send to Twitch chat..."
+      class="input-twitch w-full rounded-lg p-4 text-white placeholder:text-gray-500 resize-none"
+    ></textarea>
+
+    <button
+      id="startBotBtn"
+      class="btn-twitch mt-8 w-full py-4 text-lg font-semibold rounded-lg text-white shadow-lg"
+    >
+      Start Bot
+    </button>
+
+    <button
+      id="resumeBtn"
+      class="btn-resume mt-4 w-full py-4 text-lg font-semibold rounded-lg shadow-lg hidden"
+    >
+      ▶️ Press to Resume
+    </button>
+
+    <p id="status" class="mt-6 text-center status-stopped">
+      Bot is stopped.
+    </p>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('startBotBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const statusDiv = document.getElementById('status');
+    const chatInput = document.getElementById('chatInput');
+    let botRunning = false;
+    let botPaused = false;
+
+    async function checkConnection() {
+      try {
+        await fetch('http://localhost:5000/bot_status');
+      } catch (error) {
+        // Silent fail
+      }
+    }
+
+    checkConnection();
+
+    startBtn.addEventListener('click', async function() {
+      if (!botRunning) {
+        const message = chatInput.value.trim();
+        
+        if (!message) {
+          alert('Please enter a message for the bot to send.');
+          return;
+        }
+
+        try {
+          startBtn.disabled = true;
+          statusDiv.textContent = '🚀 Starting bot...';
+          statusDiv.classList.remove('status-stopped');
+          statusDiv.classList.add('status-running');
+
+          const response = await fetch('http://localhost:5000/start_bot', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: message })
+          });
+          
+          const data = await response.json();
+
+          if (data.status === 'success') {
+            botRunning = true;
+            startBtn.textContent = 'Stop Bot';
+            startBtn.disabled = false;
+            statusDiv.textContent = `✅ Bot is running. Sending message: "${message}"`;
+          } else {
+            throw new Error(data.message);
+          }
+        } catch (error) {
+          alert('Error starting bot: ' + error.message);
+          statusDiv.textContent = 'Bot is stopped.';
+          statusDiv.classList.remove('status-running');
+          statusDiv.classList.add('status-stopped');
+          startBtn.disabled = false;
+        }
+      } else {
+        try {
+          startBtn.disabled = true;
+          statusDiv.textContent = '🛑 Stopping bot...';
+
+          const response = await fetch('http://localhost:5000/stop_bot', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+
+          const data = await response.json();
+
+          if (data.status === 'success') {
+            botRunning = false;
+            botPaused = false;
+            startBtn.textContent = 'Start Bot';
+            startBtn.disabled = false;
+            resumeBtn.classList.add('hidden');
+            statusDiv.textContent = 'Bot is stopped.';
+            statusDiv.classList.remove('status-running', 'status-paused');
+            statusDiv.classList.add('status-stopped');
+          }
+        } catch (error) {
+          alert('Error stopping bot: ' + error.message);
+          startBtn.disabled = false;
+        }
+      }
+    });
+
+    resumeBtn.addEventListener('click', async function() {
+      try {
+        resumeBtn.disabled = true;
+        statusDiv.textContent = '▶️ Resuming bot...';
+
+        const response = await fetch('http://localhost:5000/resume_bot', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+          botPaused = false;
+          resumeBtn.classList.add('hidden');
+          statusDiv.textContent = '✅ Bot is running...';
+          statusDiv.classList.remove('status-paused');
+          statusDiv.classList.add('status-running');
+        } else {
+          throw new Error(data.message);
+        }
+      } catch (error) {
+        alert('Error resuming bot: ' + error.message);
+        resumeBtn.disabled = false;
+      }
+    });
+
+    setInterval(async () => {
+      try {
+        const response = await fetch('http://localhost:5000/bot_status');
+        const data = await response.json();
+
+        if (data.paused && !botPaused) {
+          botPaused = true;
+          resumeBtn.classList.remove('hidden');
+          resumeBtn.disabled = false;
+          statusDiv.textContent = '⏸️ Bot is paused. Press Resume to continue!';
+          statusDiv.classList.remove('status-running', 'status-stopped');
+          statusDiv.classList.add('status-paused');
+        } else if (!data.paused && botPaused) {
+          botPaused = false;
+          resumeBtn.classList.add('hidden');
+        }
+        
+        if (!data.running && botRunning) {
+          botRunning = false;
+          botPaused = false;
+          startBtn.textContent = 'Start Bot';
+          startBtn.disabled = false;
+          resumeBtn.classList.add('hidden');
+          statusDiv.textContent = '✅ Bot has finished.';
+          statusDiv.classList.remove('status-running', 'status-paused');
+          statusDiv.classList.add('status-stopped');
+        }
+      } catch (error) {
+        // Silent fail
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
